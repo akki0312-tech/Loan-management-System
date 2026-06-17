@@ -122,6 +122,13 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# Access Token expires (lasts 15 minutes).
+# The frontend sends the Refresh Token to the /api/auth/token/refresh/ endpoint to get a new access token.
+# Because ROTATE_REFRESH_TOKENS = True, the backend does two things:
+# It sends back a new Access Token.
+# It also sends back a brand new Refresh Token.
+# Because BLACKLIST_AFTER_ROTATION = True, the old refresh token is added to a database blacklist table. If anyone tries to reuse that old refresh token, the server rejects it.
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
