@@ -44,7 +44,7 @@ class EMISchedule(models.Model):
 
 class Payment(models.Model):
     loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name='payments')
-    emi_schedule = models.ForeignKey(EMISchedule, on_delete=models.CASCADE, related_name='payments',unique=True)
+    emi_schedule = models.OneToOneField(EMISchedule, on_delete=models.CASCADE, related_name='payment')
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2)
     paid_at = models.DateTimeField(auto_now_add=True)
 
