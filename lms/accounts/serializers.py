@@ -121,7 +121,38 @@ class CreditScoreHistorySerializer(serializers.ModelSerializer):
 # This ensures updated_by is always set to the correct logged-in admin who is performing the update
 
     
+class AdminKYCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BorrowerProfile
+        fields = ['is_kyc_verified']
+
     
+class CreditScoreHistorySerializer(serializers.ModelSerializer):
+    updated_by_username = serializers.CharField(source='updated_by.username', read_only=True)
+    
+    class Meta:
+        model = CreditScoreHistory
+        fields = ['id', 'borrower_profile', 'score', 'remarks', 'recorded_at', 'updated_by', 'updated_by_username']
+        read_only_fields = ['recorded_at', 'updated_by']
+
+    def create(self, validated_data):
+        # 1. Get the admin making the request
+        request = self.context.get('request')
+        if request and request.user:
+            validated_data['updated_by'] = request.user
+            
+        # 2. Create the history record
+        history = super().create(validated_data)
+        
+        # 3. Update the borrower's main profile score
+        profile = history.borrower_profile
+        profile.credit_score = history.score
+        profile.save()
+        
+        return history
+        
+    
+        
 
     
 
