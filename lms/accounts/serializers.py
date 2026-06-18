@@ -1,5 +1,4 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
 from .models import BorrowerProfile, CustomUser, CreditScoreHistory
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from datetime import date
@@ -101,25 +100,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'date_of_birth', 'aadhar_number', 'role', 'borrower_profile']
         read_only_fields = ['role']
     
-    
-class CreditScoreHistorySerializer(serializers.ModelSerializer):
-    updated_by_username = serializers.CharField(source='updated_by.username', read_only=True)
-    class Meta:
-        model = CreditScoreHistory
-        fields = ['id', 'borrower_profile', 'score', 'remarks', 'recorded_at', 'updated_by', 'updated_by_username']
-        read_only_fields = ['recorded_at', 'updated_by'] #recorded_at and updated_by are read-only because they are automatically set by the system when a new credit score history record is created or updated.
-    def create(self, validated_data):
-        # Retrieve the logged-in admin user from the request context
-        request = self.context.get('request')
-        if request and request.user:
-            validated_data['updated_by'] = request.user
-            
-        return super().create(validated_data)
-    
-#Views in Django REST Framework pass the HTTP request object into the serializer's context. 
-# Inside the serializer, we can access the logged-in user using self.context['request'].user. 
-# This ensures updated_by is always set to the correct logged-in admin who is performing the update
-
     
 class AdminKYCSerializer(serializers.ModelSerializer):
     class Meta:

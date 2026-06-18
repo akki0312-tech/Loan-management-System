@@ -1,6 +1,5 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-import datetime
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 
