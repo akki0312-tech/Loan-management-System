@@ -146,4 +146,20 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Media files (user uploads — profile pictures etc.)
+MEDIA_URL  = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 AUTH_USER_MODEL = 'accounts.CustomUser'
+
+# ─────────────────────────────────────────────────────────────
+# PII Field Encryption & Hashing Keys
+# WARNING: In production, load these from environment variables.
+#          Never commit real keys to version control.
+#
+# Generate a valid Fernet key with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# ─────────────────────────────────────────────────────────────
+FIELD_ENCRYPTION_KEY = 'TluxTaGOaGGGfvFdDMPvjVAJDxJkgT5VKo2PuQbzqe8='  # Replace in production
+FIELD_HASH_KEY       = 'lms-hmac-secret-key-replace-in-production'         # Replace in production

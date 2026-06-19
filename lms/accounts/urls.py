@@ -6,7 +6,8 @@ from .views import (
     MyProfileView,
     BorrowerProfileView,
     kycView,
-    CreditScoreUpdateView
+    CreditScoreUpdateView,
+    ProfilePictureView,
 )
 
 urlpatterns = [
@@ -17,4 +18,5 @@ urlpatterns = [
     path('auth/borrower-profile/', BorrowerProfileView.as_view(), name='borrower_profile'),
     path('admin/verify-kyc/<int:pk>/', kycView.as_view(), name='verify_kyc'),
     path('admin/update-credit-score/', CreditScoreUpdateView.as_view(), name='update_credit_score'),
+    path('auth/profile-picture/', ProfilePictureView.as_view(), name='profile_picture'),
 ]

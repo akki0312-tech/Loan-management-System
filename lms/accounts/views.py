@@ -1,16 +1,16 @@
-from django.shortcuts import render
 from rest_framework import generics
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
+from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework_simplejwt.views import TokenObtainPairView
-from django.contrib.auth.models import User
 from django.utils import timezone
-from rest_framework import serializers
-from django.db.models import Q
 from rest_framework.response import Response
-from .models import BorrowerProfile, CustomUser, CreditScoreHistory 
-from .serializers import BorrowerProfileSerializer, CreditScoreHistorySerializer, RegisterSerializer, CustomTokenObtainPairSerializer, UserSerializer, AdminKYCSerializer
-from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
+from .models import BorrowerProfile, CustomUser, CreditScoreHistory
+from .serializers import (
+    BorrowerProfileSerializer, CreditScoreHistorySerializer,
+    RegisterSerializer, CustomTokenObtainPairSerializer,
+    UserSerializer, AdminKYCSerializer, ProfilePictureSerializer,
+)
+
 
 class IsAdminUser(BasePermission):
     def has_permission(self, request, view):
@@ -56,4 +56,13 @@ class CreditScoreUpdateView(generics.CreateAPIView):
     serializer_class = CreditScoreHistorySerializer
     permission_classes = [IsAdminUser]
 
-   
+
+class ProfilePictureView(generics.UpdateAPIView):
+    """PATCH /api/auth/profile-picture/ — upload or replace profile picture."""
+    serializer_class = ProfilePictureSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+    http_method_names = ['patch']  # PUT not allowed — only partial update makes sense here
+
+    def get_object(self):
+        return self.request.user

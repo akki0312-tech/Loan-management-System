@@ -2,17 +2,21 @@ from rest_framework import serializers
 from .models import BorrowerProfile, CustomUser, CreditScoreHistory
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from datetime import date
+from .encryption import encrypt, make_hash, mask_aadhar, mask_pan
 
 class RegisterSerializer(serializers.ModelSerializer):
-    confirm_password = serializers.CharField(write_only=True) #why is this not on model?Because its just a check to confirm password and we don't want to store it in database
+    confirm_password = serializers.CharField(write_only=True)
+    # Raw input fields — validated, then encrypted before saving
+    aadhar_number = serializers.CharField(write_only=True)
+    pan_number    = serializers.CharField(write_only=True)
 
-    class Meta: #what is a meta class? Meta class is a way to specify additional information about the serializer, such as which model it is based on and which fields to include or exclude.
+    class Meta:
         model = CustomUser
         fields = ['username', 'email', 'password', 'confirm_password',
                   'first_name', 'last_name', 'phone_number',
-                  'date_of_birth', 'aadhar_number']
+                  'date_of_birth', 'aadhar_number', 'pan_number']
         extra_kwargs = {
-            'password': {'write_only': True},  # never return password in response
+            'password': {'write_only': True},
         }
 #Object level validation: validate() method is called after field level validation and can be used to validate multiple fields together. In this case, we are checking if password and confirm_password match.
     def validate(self, data):
@@ -25,9 +29,24 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Phone number must be 10 digits.")
         return value
     
-    def validate_aadhar_number(self,value):
+    def validate_aadhar_number(self, value):
         if not value.isdigit() or len(value) != 12:
-            raise serializers.ValidationError("Aadhar number must be 12 digits.")
+            raise serializers.ValidationError("Aadhar number must be exactly 12 digits.")
+        # Uniqueness check via hash (not ciphertext)
+        h = make_hash(value)
+        if CustomUser.objects.filter(aadhar_hash=h).exists():
+            raise serializers.ValidationError("This Aadhar number is already registered.")
+        return value
+
+    def validate_pan_number(self, value):
+        import re
+        if not re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', value.upper()):
+            raise serializers.ValidationError("PAN must be in format: ABCDE1234F")
+        value = value.upper()
+        # Uniqueness check via hash
+        h = make_hash(value)
+        if CustomUser.objects.filter(pan_hash=h).exists():
+            raise serializers.ValidationError("This PAN number is already registered.")
         return value
     
     def validate_date_of_birth(self,value):
@@ -37,11 +56,21 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You must be at least 18 years old to register.")
         return value
 #Once all validation checks pass, calling .save() on a serializer will trigger this create() method to actually insert a new record into your database.
-    def create(self, validated_data): #validated_data is a dictionary of the validated data that was passed to the serializer. It contains all the fields that were defined in the serializer's Meta class, as well as any additional fields that were added during validation.
-        validated_data.pop('confirm_password') #remove confirm_password from validated_data before creating user because it is not a field in the CustomUser model
-        validated_data['role'] = 'BORROWER' #You should never allow a user to register themselves as an Admin via a public registration endpoint
-        user = CustomUser.objects.create_user(**validated_data) #CustomUser.objects.create_user(...) (and objects.create(...)) does both in one step: it instantiates the object, hashes the password safely, and saves it directly to the database.
-        return user
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        validated_data['role'] = 'BORROWER'
+
+        # Encrypt + hash Aadhar
+        raw_aadhar = validated_data.pop('aadhar_number')
+        validated_data['aadhar_number'] = encrypt(raw_aadhar)
+        validated_data['aadhar_hash']   = make_hash(raw_aadhar)
+
+        # Encrypt + hash PAN
+        raw_pan = validated_data.pop('pan_number')
+        validated_data['pan_number'] = encrypt(raw_pan)
+        validated_data['pan_hash']   = make_hash(raw_pan)
+
+        return CustomUser.objects.create_user(**validated_data)
 
 #So when the user logs in, they send their username and password.
 #parent class validates if this particular username+password exists in db, 
@@ -95,10 +124,35 @@ class BorrowerProfileSerializer(serializers.ModelSerializer):
     
 class UserSerializer(serializers.ModelSerializer):
     borrower_profile = BorrowerProfileSerializer(read_only=True)
+    # Return masked values in the response — never raw encrypted blobs or plain text
+    aadhar_display = serializers.SerializerMethodField()
+    pan_display    = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone_number', 'date_of_birth', 'aadhar_number', 'role', 'borrower_profile']
-        read_only_fields = ['role']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name',
+                  'phone_number', 'date_of_birth',
+                  'aadhar_display', 'pan_display',
+                  'profile_picture', 'role', 'borrower_profile']
+        read_only_fields = ['role', 'profile_picture']
+
+    def get_aadhar_display(self, obj):
+        if not obj.aadhar_number:
+            return None
+        from .encryption import decrypt
+        try:
+            return mask_aadhar(decrypt(obj.aadhar_number))
+        except Exception:
+            return 'XXXX-XXXX-XXXX'
+
+    def get_pan_display(self, obj):
+        if not obj.pan_number:
+            return None
+        from .encryption import decrypt
+        try:
+            return mask_pan(decrypt(obj.pan_number))
+        except Exception:
+            return 'XXXXXXXXXX'
     
     
 class AdminKYCSerializer(serializers.ModelSerializer):
@@ -130,14 +184,42 @@ class CreditScoreHistorySerializer(serializers.ModelSerializer):
         profile.save()
         
         return history
-        
-    
-        
-
-    
 
 
-           
-    
+class ProfilePictureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['profile_picture']
 
-    
+    def validate_profile_picture(self, image):
+        from PIL import Image
+
+        # 1. Only allow JPEG and PNG
+        img = Image.open(image)
+        if img.format not in ['JPEG', 'PNG']:
+            raise serializers.ValidationError("Only JPEG and PNG images are allowed.")
+
+        # 2. Reject files larger than 5 MB before processing
+        if image.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image size must not exceed 5 MB.")
+
+        # 3. Resize to max 500x500 using Pillow (preserves aspect ratio)
+        max_size = (500, 500)
+        img.thumbnail(max_size, Image.LANCZOS)
+
+        # 4. Save the resized image back into the InMemoryUploadedFile
+        import io
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        output = io.BytesIO()
+        img_format = img.format or 'JPEG'
+        img.save(output, format=img_format)
+        output.seek(0)
+
+        return InMemoryUploadedFile(
+            output,
+            'ImageField',
+            image.name,
+            image.content_type,
+            output.getbuffer().nbytes,
+            None
+        )

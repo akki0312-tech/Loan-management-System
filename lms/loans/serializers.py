@@ -150,9 +150,12 @@ class EMIScheduleSerializer(serializers.ModelSerializer):
             'outstanding_balance', 
             'status'
         ]
-        # Everything is read-only because EMI schedules are generated 
+        # Everything is read-only because EMI schedules are generated
         # automatically when a loan is disbursed, and updated when payments are made.
-        read_only_fields = fields
+        read_only_fields = [
+            'id', 'loan', 'emi_number', 'due_date', 'emi_amount',
+            'principal_component', 'interest_component', 'outstanding_balance', 'status'
+        ]
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:

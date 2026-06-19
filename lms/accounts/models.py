@@ -9,8 +9,14 @@ class CustomUser(AbstractUser):
     last_name = models.CharField(max_length=30, null=True, blank=True)
     phone_number = models.CharField(max_length=10, unique=True, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    aadhar_number = models.CharField(max_length=12, unique=True, null=True, blank=True)
+    # Aadhar: stored encrypted; hash used for uniqueness checks
+    aadhar_number = models.TextField(null=True, blank=True)          # encrypted ciphertext
+    aadhar_hash   = models.CharField(max_length=64, unique=True, null=True, blank=True)  # HMAC-SHA256
+    # PAN: same pattern
+    pan_number    = models.TextField(null=True, blank=True)           # encrypted ciphertext
+    pan_hash      = models.CharField(max_length=64, unique=True, null=True, blank=True)  # HMAC-SHA256
     role = models.CharField(max_length=10, choices=[('ADMIN', 'Admin'), ('BORROWER', 'Borrower')], default='BORROWER')
+    profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

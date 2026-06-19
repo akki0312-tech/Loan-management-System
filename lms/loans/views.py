@@ -1,11 +1,76 @@
-from django.shortcuts import render
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.views import APIView
-from .serializers import EMICalculationSerializer
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.utils import timezone
+from dateutil.relativedelta import relativedelta
+from decimal import Decimal, ROUND_HALF_UP
+
 from .models import LoanType, Loan, EMISchedule, Payment
+from .serializers import (
+    EMICalculationSerializer,
+    LoanTypeSerializer,
+    LoanSerializer,
+    EMIScheduleSerializer,
+    PaymentSerializer,
+)
+# Reuse IsAdminUser from accounts — DRY, no duplication
+from accounts.views import IsAdminUser
+
+
+
+
+def generate_emi_schedule(loan):
+    principal = loan.amount_requested
+    annual_rate = loan.interest_rate
+    tenure = loan.tenure_months
+    interest_type = loan.interest_type
+    start_date = loan.disbursed_at.date() if loan.disbursed_at else timezone.now().date()
+
+    EMISchedule.objects.filter(loan=loan).delete()  # clean slate if regenerated
+
+    if interest_type == 'FLAT':
+        total_interest = principal * (annual_rate / Decimal('100')) * (Decimal(tenure) / Decimal('12'))
+        monthly_emi = ((principal + total_interest) / tenure).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        monthly_principal = (principal / tenure).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        monthly_interest = (total_interest / tenure).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        outstanding = principal
+
+        for i in range(1, tenure + 1):
+            outstanding = (outstanding - monthly_principal).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if i == tenure:
+                outstanding = Decimal('0.00')
+            EMISchedule.objects.create(
+                loan=loan,
+                emi_number=i,
+                due_date=start_date + relativedelta(months=i),
+                emi_amount=monthly_emi,
+                principal_component=monthly_principal,
+                interest_component=monthly_interest,
+                outstanding_balance=max(outstanding, Decimal('0.00')),
+            )
+
+    elif interest_type == 'REDUCING_BALANCE':
+        monthly_rate = annual_rate / Decimal('100') / Decimal('12')
+        factor = (1 + monthly_rate) ** tenure
+        monthly_emi = (principal * monthly_rate * factor / (factor - 1)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        outstanding = principal
+
+        for i in range(1, tenure + 1):
+            interest_component = (outstanding * monthly_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            principal_component = (monthly_emi - interest_component).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            outstanding = (outstanding - principal_component).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            if i == tenure:
+                outstanding = Decimal('0.00')
+            EMISchedule.objects.create(
+                loan=loan,
+                emi_number=i,
+                due_date=start_date + relativedelta(months=i),
+                emi_amount=monthly_emi,
+                principal_component=principal_component,
+                interest_component=interest_component,
+                outstanding_balance=max(outstanding, Decimal('0.00')),
+            )
 
 
 class EMICalculationView(APIView):
@@ -14,65 +79,161 @@ class EMICalculationView(APIView):
     def post(self, request):
         serializer = EMICalculationSerializer(data=request.data)
         if serializer.is_valid():
-            # Convert to float to avoid TypeError when mixing with integers/floats
             loan_amount = float(serializer.validated_data['loan_amount'])
             annual_rate = float(serializer.validated_data['interest_rate'])
             tenure_months = int(serializer.validated_data['tenure_months'])
             interest_type = serializer.validated_data['interest_type']
 
-            schedule = []
-            total_interest = 0.0
-
             if interest_type == 'FLAT':
-                # Total interest for the entire loan
-                total_interest = loan_amount * (annual_rate / 100) * (tenure_months / 12)
-                monthly_emi = (loan_amount + total_interest) / tenure_months
-                monthly_principal = loan_amount / tenure_months
-                monthly_interest = total_interest / tenure_months
-                outstanding = loan_amount
-
-                for month in range(1, tenure_months + 1):
-                    outstanding = round(outstanding - monthly_principal, 2)
-                    schedule.append({
-                        'month': month,
-                        'emi_amount': round(monthly_emi, 2),
-                        'principal_component': round(monthly_principal, 2),
-                        'interest_component': round(monthly_interest, 2),
-                        'outstanding_balance': max(outstanding, 0.0)
-                    })
-
-            elif interest_type == 'REDUCING_BALANCE':
+                monthly_emi = (loan_amount + (loan_amount * (annual_rate / 100) * (tenure_months / 12))) / tenure_months
+            else:
                 monthly_rate = (annual_rate / 100) / 12
-                # Standard reducing balance EMI formula
                 monthly_emi = loan_amount * monthly_rate * ((1 + monthly_rate) ** tenure_months) / (((1 + monthly_rate) ** tenure_months) - 1)
-                outstanding = loan_amount
 
-                for month in range(1, tenure_months + 1):
-                    interest_component = outstanding * monthly_rate
-                    principal_component = monthly_emi - interest_component
-                    outstanding = outstanding - principal_component
-                    total_interest += interest_component
-
-                    # Correct floating-point dust on final month
-                    if month == tenure_months:
-                        outstanding = 0.0
-
-                    schedule.append({
-                        'month': month,
-                        'emi_amount': round(monthly_emi, 2),
-                        'principal_component': round(principal_component, 2),
-                        'interest_component': round(interest_component, 2),
-                        'outstanding_balance': max(round(outstanding, 2), 0.0)
-                    })
-
-            total_payable = loan_amount + total_interest
-
-            return Response({
-                'monthly_emi': round(monthly_emi, 2),
-                'total_principal': round(loan_amount, 2),
-                'total_interest': round(total_interest, 2),
-                'total_payable': round(total_payable, 2),
-                'schedule': schedule
-            }, status=status.HTTP_200_OK)
+            return Response({'monthly_emi': round(monthly_emi, 2)}, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# LOAN TYPE: Admin CRUD, Borrowers read-only
+
+
+class LoanTypeListCreateView(generics.ListCreateAPIView):
+    """
+    GET  — anyone authenticated can list loan types.
+    POST — admin only, to create a new loan type.
+    """
+    queryset = LoanType.objects.all()
+    serializer_class = LoanTypeSerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+
+class LoanTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET    — any authenticated user.
+    PUT/PATCH/DELETE — admin only.
+    """
+    queryset = LoanType.objects.all()
+    serializer_class = LoanTypeSerializer
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+
+class LoanListCreateView(generics.ListCreateAPIView):
+    """
+    POST — borrower applies for a loan.
+    GET  — borrowers see only their own loans; admins see all.
+    """
+    serializer_class = LoanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'ADMIN' or user.is_superuser:
+            return Loan.objects.all()
+        return Loan.objects.filter(borrower=user)
+
+    def get_serializer_context(self):
+        # Pass request into serializer so validate() can access request.user
+        return {'request': self.request}
+
+
+class LoanDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET        — borrower can view their own loan; admin can view any.
+    PATCH/PUT  — admin only (to update status through the state machine).
+    """
+    serializer_class = LoanSerializer
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'ADMIN' or user.is_superuser:
+            return Loan.objects.all()
+        return Loan.objects.filter(borrower=user)
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+    def perform_update(self, serializer):
+        """
+        After saving, if the new status is DISBURSED:
+        - stamp disbursed_at
+        - generate the EMI schedule
+        If the new status is APPROVED:
+        - stamp approved_by and approved_at
+        """
+        loan = serializer.save()
+        if loan.status == 'APPROVED' and not loan.approved_at:
+            loan.approved_by = self.request.user
+            loan.approved_at = timezone.now()
+            loan.save(update_fields=['approved_by', 'approved_at'])
+        if loan.status == 'DISBURSED' and not loan.disbursed_at:
+            loan.disbursed_at = timezone.now()
+            loan.save(update_fields=['disbursed_at'])
+            generate_emi_schedule(loan)
+
+
+# ─────────────────────────────────────────
+# EMI SCHEDULE: Read-only for borrower
+# ─────────────────────────────────────────
+
+class EMIScheduleListView(generics.ListAPIView):
+    """
+    GET — borrower can only see EMIs for their own loans.
+    Admins can see all.
+    URL: /api/loans/<loan_pk>/emi-schedule/
+    """
+    serializer_class = EMIScheduleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        loan_pk = self.kwargs['loan_pk']
+        if user.role == 'ADMIN' or user.is_superuser:
+            return EMISchedule.objects.filter(loan_id=loan_pk)
+        return EMISchedule.objects.filter(loan_id=loan_pk, loan__borrower=user)
+
+
+# ─────────────────────────────────────────
+# PAYMENTS: Borrower pays an EMI
+# ─────────────────────────────────────────
+
+class PaymentCreateView(generics.CreateAPIView):
+    """
+    POST — borrower submits a payment for a specific EMI.
+    All validation (amount match, no skipping, loan active) is in the serializer.
+    """
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+
+class PaymentListView(generics.ListAPIView):
+    """
+    GET — borrowers see only their own payment history; admins see all.
+    """
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'ADMIN' or user.is_superuser:
+            return Payment.objects.all()
+        return Payment.objects.filter(loan__borrower=user)
+
+
