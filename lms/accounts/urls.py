@@ -1,6 +1,6 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import (
+from accounts.views import (
     RegisterView,
     LoginView,
     MyProfileView,
@@ -8,6 +8,7 @@ from .views import (
     kycView,
     CreditScoreUpdateView,
     ProfilePictureView,
+    RoleAssignmentView,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     path('admin/verify-kyc/<int:pk>/', kycView.as_view(), name='verify_kyc'),
     path('admin/update-credit-score/', CreditScoreUpdateView.as_view(), name='update_credit_score'),
     path('auth/profile-picture/', ProfilePictureView.as_view(), name='profile_picture'),
+    path('auth/users/<int:pk>/assign-role/', RoleAssignmentView.as_view(), name='assign_role'),
 ]

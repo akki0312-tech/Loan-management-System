@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import LoanType, Loan, EMISchedule, Payment
+from loans.models import LoanType, Loan, EMISchedule, Payment
 from django.core.validators import MinValueValidator, MaxValueValidator
 from accounts.models import BorrowerProfile
 

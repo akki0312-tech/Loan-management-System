@@ -5,9 +5,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal, ROUND_HALF_UP
+from django.db.models import Q
 
-from .models import LoanType, Loan, EMISchedule, Payment
-from .serializers import (
+
+from loans.models import LoanType, Loan, EMISchedule, Payment
+from loans.serializers import (
     EMICalculationSerializer,
     LoanTypeSerializer,
     LoanSerializer,
@@ -16,9 +18,6 @@ from .serializers import (
 )
 # Reuse IsAdminUser from accounts — DRY, no duplication
 from accounts.views import IsAdminUser
-
-
-
 
 def generate_emi_schedule(loan):
     principal = loan.amount_requested
@@ -100,10 +99,10 @@ class EMICalculationView(APIView):
 
 
 class LoanTypeListCreateView(generics.ListCreateAPIView):
-    """
-    GET  — anyone authenticated can list loan types.
-    POST — admin only, to create a new loan type.
-    """
+
+    # GET  — anyone authenticated can list loan types.
+    # POST — admin only, to create a new loan type.
+
     queryset = LoanType.objects.all()
     serializer_class = LoanTypeSerializer
 
@@ -114,10 +113,10 @@ class LoanTypeListCreateView(generics.ListCreateAPIView):
 
 
 class LoanTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET    — any authenticated user.
-    PUT/PATCH/DELETE — admin only.
-    """
+    
+    # GET    — any authenticated user.
+    # PUT/PATCH/DELETE — admin only.
+    
     queryset = LoanType.objects.all()
     serializer_class = LoanTypeSerializer
 
@@ -128,18 +127,26 @@ class LoanTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class LoanListCreateView(generics.ListCreateAPIView):
-    """
-    POST — borrower applies for a loan.
-    GET  — borrowers see only their own loans; admins see all.
-    """
+    
+    # POST — borrower applies for a loan.
+    # GET  — borrowers see only their own loans; admins see all.
+    
     serializer_class = LoanSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'ADMIN' or user.is_superuser:
+        if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
             return Loan.objects.all()
-        return Loan.objects.filter(borrower=user)
+        elif user.role == 'MANAGER':
+            # Manager sees loans of borrowers assigned directly to them OR assigned to officers who report to them
+            return Loan.objects.filter(Q(borrower__manager=user) | Q(borrower__manager__manager=user))
+        elif user.role == 'LOAN_OFFICER':
+            # Loan officer sees loans of borrowers assigned to them
+            return Loan.objects.filter(borrower__manager=user)
+        elif user.role == 'BORROWER':
+            return Loan.objects.filter(borrower=user)
+        return Loan.objects.none()
 
     def get_serializer_context(self):
         # Pass request into serializer so validate() can access request.user
@@ -147,34 +154,32 @@ class LoanListCreateView(generics.ListCreateAPIView):
 
 
 class LoanDetailView(generics.RetrieveUpdateAPIView):
-    """
-    GET        — borrower can view their own loan; admin can view any.
-    PATCH/PUT  — admin only (to update status through the state machine).
-    """
+    # GET        — borrower can view their own loan; staff/admin can view assigned.
+    # PATCH/PUT  — staff/admin only (to update status through the state machine).
     serializer_class = LoanSerializer
 
     def get_permissions(self):
         if self.request.method in ['PUT', 'PATCH']:
-            return [IsAdminUser()]
+            # Require staff or admin to update loan status
+            return [HasRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER')()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'ADMIN' or user.is_superuser:
+        if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
             return Loan.objects.all()
-        return Loan.objects.filter(borrower=user)
+        elif user.role == 'MANAGER':
+            return Loan.objects.filter(Q(borrower__manager=user) | Q(borrower__manager__manager=user))
+        elif user.role == 'LOAN_OFFICER':
+            return Loan.objects.filter(borrower__manager=user)
+        elif user.role == 'BORROWER':
+            return Loan.objects.filter(borrower=user)
+        return Loan.objects.none()
 
     def get_serializer_context(self):
         return {'request': self.request}
 
     def perform_update(self, serializer):
-        """
-        After saving, if the new status is DISBURSED:
-        - stamp disbursed_at
-        - generate the EMI schedule
-        If the new status is APPROVED:
-        - stamp approved_by and approved_at
-        """
         loan = serializer.save()
         if loan.status == 'APPROVED' and not loan.approved_at:
             loan.approved_by = self.request.user
@@ -186,14 +191,13 @@ class LoanDetailView(generics.RetrieveUpdateAPIView):
             generate_emi_schedule(loan)
 
 
-# ─────────────────────────────────────────
 # EMI SCHEDULE: Read-only for borrower
-# ─────────────────────────────────────────
+
 
 class EMIScheduleListView(generics.ListAPIView):
     """
     GET — borrower can only see EMIs for their own loans.
-    Admins can see all.
+    Staff can see EMIs for assigned loans.
     URL: /api/loans/<loan_pk>/emi-schedule/
     """
     serializer_class = EMIScheduleSerializer
@@ -202,20 +206,31 @@ class EMIScheduleListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         loan_pk = self.kwargs['loan_pk']
-        if user.role == 'ADMIN' or user.is_superuser:
+        
+        # Verify the user has access to the loan first
+        if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
             return EMISchedule.objects.filter(loan_id=loan_pk)
-        return EMISchedule.objects.filter(loan_id=loan_pk, loan__borrower=user)
+        elif user.role == 'MANAGER':
+            return EMISchedule.objects.filter(
+                Q(loan__borrower__manager=user) | Q(loan__borrower__manager__manager=user),
+                loan_id=loan_pk
+            )
+        elif user.role == 'LOAN_OFFICER':
+            return EMISchedule.objects.filter(loan__borrower__manager=user, loan_id=loan_pk)
+        elif user.role == 'BORROWER':
+            return EMISchedule.objects.filter(loan__borrower=user, loan_id=loan_pk)
+        return EMISchedule.objects.none()
 
 
-# ─────────────────────────────────────────
+
 # PAYMENTS: Borrower pays an EMI
-# ─────────────────────────────────────────
+
 
 class PaymentCreateView(generics.CreateAPIView):
-    """
-    POST — borrower submits a payment for a specific EMI.
-    All validation (amount match, no skipping, loan active) is in the serializer.
-    """
+ 
+    # POST — borrower submits a payment for a specific EMI.
+    # All validation (amount match, no skipping, loan active) is in the serializer.
+   
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
 
@@ -224,16 +239,20 @@ class PaymentCreateView(generics.CreateAPIView):
 
 
 class PaymentListView(generics.ListAPIView):
-    """
-    GET — borrowers see only their own payment history; admins see all.
-    """
+    # GET — borrowers see only their own payment history; staff/admins see assigned.
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'ADMIN' or user.is_superuser:
+        if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
             return Payment.objects.all()
-        return Payment.objects.filter(loan__borrower=user)
+        elif user.role == 'MANAGER':
+            return Payment.objects.filter(Q(loan__borrower__manager=user) | Q(loan__borrower__manager__manager=user))
+        elif user.role == 'LOAN_OFFICER':
+            return Payment.objects.filter(loan__borrower__manager=user)
+        elif user.role == 'BORROWER':
+            return Payment.objects.filter(loan__borrower=user)
+        return Payment.objects.none()
 
 

@@ -15,7 +15,16 @@ class CustomUser(AbstractUser):
     # PAN: same pattern
     pan_number    = models.TextField(null=True, blank=True)           # encrypted ciphertext
     pan_hash      = models.CharField(max_length=64, unique=True, null=True, blank=True)  # HMAC-SHA256
-    role = models.CharField(max_length=10, choices=[('ADMIN', 'Admin'), ('BORROWER', 'Borrower')], default='BORROWER')
+    role = models.CharField(max_length=15, choices=[('SUPER_ADMIN', 'Super Admin'),('ADMIN', 'Admin'),('MANAGER', 'Manager'),('LOAN_OFFICER', 'Loan_officer'), ('BORROWER', 'Borrower')], default='BORROWER')
+    manager = models.ForeignKey(
+    'self',                          # 'self' means it points to the same table (CustomUser)
+    on_delete=models.SET_NULL,       # if manager is deleted, don't delete the employee, just set this to NULL
+    null=True,                       # not everyone has a manager (e.g. Admin, Borrower)
+    blank=True,                      # optional in forms/API
+    related_name='subordinates',     # manager.subordinates.all() gives you all their team members
+    limit_choices_to={'role__in': ['ADMIN', 'MANAGER']}  # only Admins or Managers can be set as manager
+)
+
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

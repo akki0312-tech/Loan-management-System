@@ -1,8 +1,9 @@
 from rest_framework import serializers
-from .models import BorrowerProfile, CustomUser, CreditScoreHistory
+from accounts.models import BorrowerProfile, CustomUser, CreditScoreHistory
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from datetime import date
-from .encryption import encrypt, make_hash, mask_aadhar, mask_pan
+from django.contrib.auth.models import Group
+from accounts.encryption import encrypt, decrypt, make_hash, mask_aadhar, mask_pan
 
 class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True)
@@ -139,7 +140,6 @@ class UserSerializer(serializers.ModelSerializer):
     def get_aadhar_display(self, obj):
         if not obj.aadhar_number:
             return None
-        from .encryption import decrypt
         try:
             return mask_aadhar(decrypt(obj.aadhar_number))
         except Exception:
@@ -148,7 +148,6 @@ class UserSerializer(serializers.ModelSerializer):
     def get_pan_display(self, obj):
         if not obj.pan_number:
             return None
-        from .encryption import decrypt
         try:
             return mask_pan(decrypt(obj.pan_number))
         except Exception:
@@ -168,6 +167,31 @@ class CreditScoreHistorySerializer(serializers.ModelSerializer):
         model = CreditScoreHistory
         fields = ['id', 'borrower_profile', 'score', 'remarks', 'recorded_at', 'updated_by', 'updated_by_username']
         read_only_fields = ['recorded_at', 'updated_by']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request and request.user:
+            user = request.user
+            # Super Admins and Admins can update any credit score
+            if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
+                return attrs
+            
+            borrower_profile = attrs.get('borrower_profile')
+            borrower = borrower_profile.user
+            is_assigned = False
+            
+            if user.role == 'LOAN_OFFICER':
+                # Check if the borrower reports directly to this loan officer
+                is_assigned = (borrower.manager == user)
+            elif user.role == 'MANAGER':
+                # Check if borrower reports to manager directly OR to a loan officer reporting to this manager
+                is_assigned = (borrower.manager == user or (borrower.manager and borrower.manager.manager == user))
+                
+            if not is_assigned:
+                raise serializers.ValidationError(
+                    "You are not authorized to update the credit score of this borrower as they are not assigned to your reporting line."
+                )
+        return attrs
 
     def create(self, validated_data):
         # 1. Get the admin making the request
@@ -223,3 +247,83 @@ class ProfilePictureSerializer(serializers.ModelSerializer):
             output.getbuffer().nbytes,
             None
         )
+
+class RoleAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['role', 'manager']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        current_user = request.user
+        target_user = self.instance # The user being updated
+        
+        new_role = attrs.get('role', target_user.role if target_user else None)
+        new_manager = attrs.get('manager', target_user.manager if target_user else None)
+
+        # 1. Standard Admin/Super Admin checks (they can assign anyone to anything)
+        if current_user.is_superuser or current_user.role in ['SUPER_ADMIN', 'ADMIN']:
+            if new_manager and new_manager.role not in ['SUPER_ADMIN', 'ADMIN', 'MANAGER']:
+                raise serializers.ValidationError(
+                    {"manager": "Only Super Admins, Admins, or Managers can be assigned as a manager."}
+                )
+            return attrs
+
+        # 2. Manager checks (restricted)
+        if current_user.role == 'MANAGER':
+            # Managers can only assign BORROWERS
+            if target_user and target_user.role != 'BORROWER':
+                raise serializers.ValidationError(
+                    {"detail": "Managers can only update roles and assignments for Borrowers."}
+                )
+            
+            # Managers cannot change a borrower's role to ADMIN or MANAGER
+            if new_role in ['SUPER_ADMIN', 'ADMIN', 'MANAGER']:
+                raise serializers.ValidationError(
+                    {"role": "Managers cannot promote users to Admin or Manager roles."}
+                )
+            
+            # Managers can only assign borrowers to themselves OR to a Loan Officer who reports to them
+            if new_manager:
+                is_valid_assignee = (
+                    new_manager == current_user or 
+                    (new_manager.role == 'LOAN_OFFICER' and new_manager.manager == current_user)
+                )
+                if not is_valid_assignee:
+                    raise serializers.ValidationError(
+                        {"manager": "You can only assign borrowers to yourself or to a Loan Officer in your team."}
+                    )
+            
+        return attrs
+    
+    def update(self, instance, validated_data):
+        # Update the user instance fields (role and manager)
+        instance = super().update(instance, validated_data)
+        
+        # Sync Django groups based on the new role
+        role_to_group_map = {
+            'SUPER_ADMIN': 'Admins',
+            'ADMIN': 'Admins',
+            'MANAGER': 'Managers',
+            'LOAN_OFFICER': 'Loan_Officers',
+            'BORROWER': 'Borrowers',
+        }
+        
+        target_group_name = role_to_group_map.get(instance.role)
+        if target_group_name:
+            try:
+                # Remove user from all other permission groups
+                group_names = ['Admins', 'Managers', 'Loan_Officers', 'Borrowers']
+                for name in group_names:
+                    group = Group.objects.filter(name=name).first()
+                    if group:
+                        group.user_set.remove(instance)
+
+                # Add user to the new group
+                new_group = Group.objects.get(name=target_group_name)
+                new_group.user_set.add(instance)
+            except Group.DoesNotExist:
+                # If group setup command hasn't run yet, ignore group assignment
+                pass
+                
+        return instance

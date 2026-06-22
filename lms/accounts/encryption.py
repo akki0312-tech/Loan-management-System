@@ -1,15 +1,12 @@
-"""
-accounts/encryption.py
 
-Central utility for encrypting and hashing sensitive PII fields (Aadhar, PAN).
+# accounts/encryption.py
+# Design:
+#   - ENCRYPT  : Fernet symmetric encryption using FIELD_ENCRYPTION_KEY from settings.
+#                 Stored ciphertext can be decrypted to show the real value to admins.
+#   - HASH     : HMAC-SHA256 of the raw value using FIELD_HASH_KEY from settings.
+#                 Hash is stored separately and used for fast, secure uniqueness checks.
+#   - MASK     : A safe display string returned in API responses (never the raw value).
 
-Design:
-  - ENCRYPT  : Fernet symmetric encryption using FIELD_ENCRYPTION_KEY from settings.
-                Stored ciphertext can be decrypted to show the real value to admins.
-  - HASH     : HMAC-SHA256 of the raw value using FIELD_HASH_KEY from settings.
-                Hash is stored separately and used for fast, secure uniqueness checks.
-  - MASK     : A safe display string returned in API responses (never the raw value).
-"""
 
 import hmac
 import hashlib
@@ -17,7 +14,7 @@ from cryptography.fernet import Fernet
 from django.conf import settings
 
 
-def _get_fernet():
+def _get_fernet(): 
     key = settings.FIELD_ENCRYPTION_KEY
     if isinstance(key, str):
         key = key.encode()
@@ -25,13 +22,13 @@ def _get_fernet():
 
 
 def encrypt(value: str) -> str:
-    """Encrypt a plain-text string. Returns a URL-safe base64 ciphertext string."""
+    # Encrypt a plain-text string. Returns a URL-safe base64 ciphertext string.
     f = _get_fernet()
     return f.encrypt(value.encode()).decode()
 
 
 def decrypt(ciphertext: str) -> str:
-    """Decrypt a ciphertext string back to plain text."""
+    # Decrypt a ciphertext string back to plain text.
     f = _get_fernet()
     return f.decrypt(ciphertext.encode()).decode()
 

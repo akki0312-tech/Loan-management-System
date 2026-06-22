@@ -4,12 +4,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from rest_framework.response import Response
-from .models import BorrowerProfile, CustomUser, CreditScoreHistory
-from .serializers import (
-    BorrowerProfileSerializer, CreditScoreHistorySerializer,
+from accounts.models import BorrowerProfile, CustomUser, CreditScoreHistory
+from accounts.serializers import (
+    BorrowerProfileSerializer, CreditScoreHistorySerializer,RoleAssignmentSerializer,
     RegisterSerializer, CustomTokenObtainPairSerializer,
     UserSerializer, AdminKYCSerializer, ProfilePictureSerializer,
 )
+from accounts.permissions import HasRole, InGroup, IsBorrower, IsKYCVerified
+from django.db.models import Q
 
 
 class IsAdminUser(BasePermission):
@@ -47,18 +49,29 @@ class BorrowerProfileView(generics.RetrieveUpdateAPIView):
 # We can solve this elegantly inside get_object() by using Django's get_or_create method. This method checks if a profile exists; if it does, it returns it, and if it doesn't, it creates a blank one for that user first.
 
 class kycView(generics.UpdateAPIView):
-    queryset = BorrowerProfile.objects.all()
     serializer_class = AdminKYCSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER')]
 
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or user.role in ['SUPER_ADMIN', 'ADMIN']:
+            return BorrowerProfile.objects.all()
+        elif user.role == 'MANAGER':
+            # Manager sees profiles of borrowers assigned directly to them OR assigned to officers who report to them
+            return BorrowerProfile.objects.filter(Q(user__manager=user) | Q(user__manager__manager=user))
+        elif user.role == 'LOAN_OFFICER':
+            # Loan officer sees profiles of borrowers assigned to them
+            return BorrowerProfile.objects.filter(user__manager=user)
+        return BorrowerProfile.objects.none()
+    
 class CreditScoreUpdateView(generics.CreateAPIView):
     queryset = CreditScoreHistory.objects.all()
     serializer_class = CreditScoreHistorySerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [HasRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER')]
 
 
 class ProfilePictureView(generics.UpdateAPIView):
-    """PATCH /api/auth/profile-picture/ — upload or replace profile picture."""
+    # PATCH /api/auth/profile-picture/ — upload or replace profile picture.
     serializer_class = ProfilePictureSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser]
@@ -66,3 +79,23 @@ class ProfilePictureView(generics.UpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+class IsAdminManagerOrSuperAdmin(IsAuthenticated):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        # Allow Super Admin, Admin, and Manager
+        return request.user.role in ['SUPER_ADMIN', 'ADMIN', 'MANAGER'] or request.user.is_superuser
+
+class RoleAssignmentView(generics.UpdateAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = RoleAssignmentSerializer
+    permission_classes = [IsAdminManagerOrSuperAdmin]  # Updated here
+    http_method_names = ['patch']
+
+
+
+
+
+    
+    
