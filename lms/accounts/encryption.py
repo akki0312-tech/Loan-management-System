@@ -34,10 +34,10 @@ def decrypt(ciphertext: str) -> str:
 
 
 def make_hash(value: str) -> str:
-    """
-    Create a stable HMAC-SHA256 hex digest of a value.
-    Used for uniqueness checks — same input always produces same hash.
-    """
+    
+    # Create a stable HMAC-SHA256 hex digest of a value.
+    # Used for uniqueness checks — same input always produces same hash.
+    
     key = settings.FIELD_HASH_KEY
     if isinstance(key, str):
         key = key.encode()

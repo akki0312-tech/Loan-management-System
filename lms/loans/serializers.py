@@ -95,10 +95,10 @@ class LoanSerializer(serializers.ModelSerializer):
         else:
             new_status = data.get('status')
             if new_status and new_status != self.instance.status:
-                # 1. Check if the user is an admin
-                is_admin = user.role == 'ADMIN' or user.is_superuser
-                if not is_admin:
-                    raise serializers.ValidationError("Only admins can change the status of a loan.")
+                # 1. Check if the user is staff or admin
+                is_staff = user.role in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER'] or user.is_superuser
+                if not is_staff:
+                    raise serializers.ValidationError("Only authorized staff or admins can change the status of a loan.")
 
                 # 2. Enforce the state machine transitions
                 current_status = self.instance.status

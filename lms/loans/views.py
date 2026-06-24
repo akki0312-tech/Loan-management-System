@@ -20,7 +20,7 @@ from loans.serializers import (
 from accounts.views import IsAdminUser
 
 def generate_emi_schedule(loan):
-    principal = loan.amount_requested
+    principal = loan.amount_requested   
     annual_rate = loan.interest_rate
     tenure = loan.tenure_months
     interest_type = loan.interest_type

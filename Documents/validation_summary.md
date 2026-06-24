@@ -2,30 +2,33 @@
 
 ---
 
-## 1. CustomUser (Registration)
+## 1. CustomUser (Registration & Profile Update)
 
-### Field-Level
-| Field | Validation | Type |
+### Field-Level & Serializer Validation
+| Field | Validation / Rules | Mechanism |
 |---|---|---|
-| `username` | Min 3 chars, max 150, alphanumeric + underscores only, unique | Field + `validate_username()` |
-| `email` | Valid email format, unique | Field + `UniqueValidator` |
-| `password` | Min 8 chars, not fully numeric, not too common (Django validators) | Field + `validate()` |
+| `username` | Min 3 characters, max 150, alphanumeric + underscores only, unique | Field constraints + DRF validators |
+| `email` | Valid email format, unique | Field constraints + `UniqueValidator` |
+| `password` | Min 8 chars, not fully numeric, not too common | Django Auth validators + serializer |
 | `confirm_password` | Must match `password` | Object-level `validate()` |
-| `phone_number` | Digits only, 10 digits, unique | `validate_phone_number()` |
-| `date_of_birth` | Age must be ≥ 18 | `validate_date_of_birth()` |
-| `aadhar` | Exactly 12 digits, no letters, unique | `validate_aadhar()` |
+| `phone_number` | Digits only, exactly 10 digits, unique | `validate_phone_number()` |
+| `date_of_birth` | Age must be ≥ 18 (calculated against current system date) | `validate_date_of_birth()` |
+| `aadhar_number` | Exactly 12 digits, no letters, unique (via hash check) | `validate_aadhar_number()` |
+| `pan_number` | Must match uppercase alphanumeric regex `^[A-Z]{5}[0-9]{4}[A-Z]$`, unique (via hash check) | `validate_pan_number()` |
+| `profile_picture` | Only JPEG/PNG allowed; size ≤ 5 MB; auto-resized to max 500x500 pixels (aspect-ratio preserved) via Pillow | `validate_profile_picture()` |
 
-### Security
+### Security & Data Encryption
 > [!CAUTION]
-> **Role escalation prevention** — `role` field must **never** be accepted from request body.
-> It is hardcoded to `BORROWER` in `create()`. Even if a user sends `"role": "ADMIN"`, it is ignored.
+> **Role escalation prevention** — The `role` field is completely ignored from the request body in registration. It is hardcoded to `BORROWER` in the registration serializer's `create()` method. Only authorized users can update roles through the separate role assignment API.
 
 > [!CAUTION]
-> `password` must always be `write_only=True` — never returned in any API response.
+> `password` and raw input fields (`confirm_password`, `aadhar_number`, `pan_number`) are set to `write_only=True` so they never leak in any JSON API responses.
 
-> [!NOTE]
-> `aadhar` is sensitive PII. Consider encrypting it at rest using `django-encrypted-model-fields`
-> in a production system.
+> [!IMPORTANT]
+> **PII Encryption at Rest**:
+> - Raw Aadhar and PAN numbers are encrypted using **Fernet (AES-128 key-based)** cryptography before saving to the DB.
+> - Plain-text lookups on encrypted blobs are impossible. Hence, an **HMAC-SHA256 hash** of the Aadhar and PAN is created and stored in separate unique columns (`aadhar_hash`, `pan_hash`) for quick database uniqueness checks.
+> - Retrieval fields (`aadhar_display`, `pan_display`) return masked values (e.g. `XXXX-XXXX-1234`) using custom serializing methods to prevent exposing full PII values to clients.
 
 ---
 
@@ -42,12 +45,11 @@
 ### Object-Level
 | Rule | Where |
 |---|---|
-| `monthly_expenses` must be < `salary` (can't spend more than you earn) | `validate()` |
+| `monthly_expenses` must be < `salary` (cannot spend more than monthly earnings) | `validate()` |
 
 ### Security
 > [!CAUTION]
-> `is_kyc_verified` must **never** be settable by the borrower themselves.
-> Only an `ADMIN` can flip this to `True` via a dedicated admin-only endpoint.
+> `is_kyc_verified` is configured as a `read_only` field for borrowers. Only staff members with appropriate roles (Super Admin, Admin, Manager, Loan Officer) can modify KYC verification status via the dedicated staff-only KYC verification API.
 
 ---
 
@@ -57,31 +59,50 @@
 | Field | Validation | Type |
 |---|---|---|
 | `score` | Range 300 – 900 | Field `min_value=300, max_value=900` |
-| `remarks` | Cannot be blank — admin must explain the change | `required=True, allow_blank=False` |
+| `remarks` | Cannot be blank — staff must explain the score update | `required=True, allow_blank=False` |
 
-### Security & Integrity
+### Security & Hierarchical Integrity
 > [!CAUTION]
-> **Append-only enforcement** — No `UPDATE` or `DELETE` allowed on this model ever.
-> Enforce by overriding `update()` and `destroy()` in the ViewSet to raise `MethodNotAllowed`.
+> **Append-only enforcement** — No `UPDATE` or `DELETE` operations are allowed on this model to preserve audit logs.
 
-> [!CAUTION]
-> `updated_by` must be verified as `role = ADMIN` in the serializer.
-> Even if the FK resolves, check the role explicitly — don't rely on permissions alone.
-
-### Signal-Driven
 > [!IMPORTANT]
-> On every new `CreditScoreHistory` record inserted → Django signal automatically
-> updates `BorrowerProfile.credit_score` to the latest value.
-> This sync must only happen via signal — never via manual field update.
+> **Hierarchical Authorization Check**:
+> - Enforced inside `CreditScoreHistorySerializer.validate()` based on reporting line manager relationships:
+>   - **Super Admins & Admins** can update the credit score of any borrower.
+>   - **Loan Officers** can only update scores of borrowers directly assigned to them (`borrower.manager == request.user`).
+>   - **Managers** can only update scores of borrowers directly assigned to them OR assigned to Loan Officers reporting to them (`borrower.manager.manager == request.user`).
+>   - **Borrowers** are blocked entirely.
 
 ---
 
-## 4. LoanType
+## 4. Role Assignment (RoleAssignmentSerializer)
+
+This serializer handles mapping users to roles and managing reporting lines.
+
+### Validation Rules (validate())
+- **Requesting user is Admin / Super Admin**:
+  - Can assign any role to any user.
+  - Can set any `manager` as long as that manager's role is `SUPER_ADMIN`, `ADMIN`, or `MANAGER`.
+- **Requesting user is Manager**:
+  - Can only assign/update roles for users whose current role is `BORROWER`.
+  - Cannot promote a borrower to `SUPER_ADMIN`, `ADMIN`, or `MANAGER`.
+  - Can only assign a borrower to a manager/officer if it is **themselves** OR a **Loan Officer reporting directly to them** (`new_manager.manager == request.user`).
+- **Requesting user is Loan Officer / Borrower**:
+  - Access is blocked entirely at the view level (`IsAdminManagerOrSuperAdmin` permission).
+
+### Group Sync (update())
+- When a user's role is updated, the database automatically:
+  1. Clears all previous Django Group memberships (`Admins`, `Managers`, `Loan_Officers`, `Borrowers`).
+  2. Adds the user to the Django Group corresponding to their new role.
+
+---
+
+## 5. LoanType
 
 ### Field-Level
 | Field | Validation | Type |
 |---|---|---|
-| `name` | Must be unique, one of: `PERSONAL`, `HOME`, `CAR`, `EDUCATION` | `ChoiceField` + `UniqueValidator` |
+| `name` | Must be unique, one of: `PERSONAL_LOAN`, `HOME_LOAN`, `CAR_LOAN`, `EDUCATION_LOAN` | `ChoiceField` + `UniqueValidator` |
 | `interest_rate` | Must be > 0, max 100 (%) | Field `min_value=0.01, max_value=100` |
 | `interest_type` | Must be `FLAT` or `REDUCING_BALANCE` | `ChoiceField` |
 | `min_amount` | Must be > 0 | Field `min_value=0.01` |
@@ -95,11 +116,11 @@
 
 ### Security
 > [!CAUTION]
-> Only `ADMIN` can create or modify `LoanType`. No borrower access at all.
+> Only `SUPER_ADMIN` and `ADMIN` can create, update, or delete a `LoanType` (enforced via view-level permissions).
 
 ---
 
-## 5. Loan (Application)
+## 6. Loan (Application & Status Updates)
 
 ### Field-Level
 | Field | Validation | Type |
@@ -111,54 +132,40 @@
 | Rule | Where |
 |---|---|
 | `borrower.borrowerprofile.is_kyc_verified` must be `True` | `validate()` |
-| `amount_requested` ≥ `loan_type.min_amount` | `validate()` |
-| `tenure_months` within `loan_type.min_tenure_months` ↔ `max_tenure_months` | `validate()` |
+| `amount_requested` must be ≥ `loan_type.min_amount` | `validate()` |
+| `tenure_months` must be within `loan_type.min_tenure_months` ↔ `loan_type.max_tenure_months` | `validate()` |
+| User cannot apply if they already have an active/disbursed loan (`status__in=['APPROVED', 'DISBURSED', 'ACTIVE', 'OVERDUE']`) | `validate()` |
 
 ### Security & Integrity
 > [!CAUTION]
-> **Admin-only fields** — `approved_by`, `approved_at`, `disbursed_at`, `status` must
-> **never** be accepted from borrower input. These are set by the system or admin only.
-
-> [!CAUTION]
-> **Rate/type snapshot** — `interest_rate` and `interest_type` must be auto-copied from
-> `LoanType` at the time of application inside `create()`. Never accepted from request body.
+> **Admin/Staff-only fields** — `approved_by`, `approved_at`, `disbursed_at`, `status`, and borrower relation must never be accepted from borrower input during creation.
+> `interest_rate` and `interest_type` are snapshotted from `LoanType` on creation.
 
 > [!IMPORTANT]
-> **State machine enforcement** — Loan status can only move forward along valid transitions.
-> Any attempt to set an invalid transition (e.g. `PENDING → CLOSED`) must be rejected.
-> ```
-> PENDING → UNDER_REVIEW → APPROVED → DISBURSED → ACTIVE → CLOSED
->                        ↘ REJECTED             ↘ OVERDUE → DEFAULTED
-> CANCELLED ← only from PENDING or UNDER_REVIEW
-> ```
-
-> [!NOTE]
-> **Consideration** — Should a borrower be allowed to have multiple ACTIVE loans simultaneously?
-> If not, add a check: reject if borrower already has a loan with status `ACTIVE` or `DISBURSED`.
+> **Status Transitions (State Machine)**:
+> - Enforced inside `LoanSerializer.validate()` when status is updated. Only the following transitions are valid:
+>   ```
+>   PENDING → UNDER_REVIEW → APPROVED → DISBURSED → ACTIVE → CLOSED
+>                          ↘ REJECTED             ↘ OVERDUE → DEFAULTED
+>   CANCELLED ← only from PENDING or UNDER_REVIEW
+>   ```
+> - Changing loan status is restricted to authorized staff (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`) or superusers.
 
 ---
 
-## 6. EMISchedule
+## 7. EMISchedule
 
 ### Integrity
-> [!CAUTION]
-> EMISchedule records are **never created by user input** — generated automatically
-> when `Loan.status → DISBURSED`. The creation endpoint (if any) must be admin/system only.
-
-> [!CAUTION]
-> No `UPDATE` or `DELETE` allowed. Override `update()` and `destroy()` to raise `MethodNotAllowed`.
-
-### Internal Integrity Checks (on generation)
-| Rule |
-|---|
-| `principal_component + interest_component` must equal `emi_amount` exactly |
-| `outstanding_balance` after the final EMI must equal `0.00` |
-| `emi_number` must be sequential from 1 to `tenure_months` with no gaps |
-| `due_date` must be exactly 1 month apart for each row |
+- Generated automatically when `Loan.status` transitions to `DISBURSED`.
+- Read-only; `UPDATE` and `DELETE` requests are rejected.
+- **Verification checks on generation**:
+  - `principal_component + interest_component` must equal the calculated monthly `emi_amount` exactly.
+  - The final outstanding balance must resolve to `0.00` after the final installment.
+  - Installment numbers (`emi_number`) must be sequential from 1 to the requested tenure months without gaps.
 
 ---
 
-## 7. Payment
+## 8. Payment
 
 ### Field-Level
 | Field | Validation | Type |
@@ -169,68 +176,24 @@
 | Rule | Where |
 |---|---|
 | `amount_paid` must exactly equal `emi_schedule.emi_amount` | `validate()` |
-| `emi_schedule.status` must be `PENDING` or `OVERDUE` (not already `PAID`) | `validate()` |
-| All previous EMIs (`emi_number < current`) must be `PAID` — no skipping | `validate()` |
-| `loan.status` must be `ACTIVE` — can't pay a `CLOSED` or `DEFAULTED` loan | `validate()` |
+| `emi_schedule.status` must be `PENDING` or `OVERDUE` (cannot pay a paid EMI) | `validate()` |
+| Previous installments must be paid first (no skipping due dates) | `validate()` |
+| `loan.status` must be `ACTIVE` or `DISBURSED` | `validate()` |
 
 ### Integrity
-> [!CAUTION]
-> **Append-only** — Payment records are never updated or deleted. Override accordingly.
-
-> [!IMPORTANT]
-> **Uniqueness** — Add a `unique=True` constraint or `UniqueValidator` on `emi_schedule`
-> to prevent double-payment of the same EMI.
+- Payments are **append-only**; editing or deleting payment records is strictly prohibited.
+- `UniqueValidator` is applied to `emi_schedule` to prevent duplicate payments for the same installment.
 
 ---
 
 ## Cross-Cutting Security Concerns
 
-### Object-Level Permissions (Row-level security)
-> [!IMPORTANT]
-> These are enforced in **Views/ViewSets**, not serializers:
-> - A borrower can only view/pay their **own** loans and EMIs
-> - A borrower cannot access another borrower's data even if they know the ID
-> - Enforce using `get_queryset()` filtered by `request.user`
+### Data-Level Authorization (Row-Level Security)
+Enforced at the View level (`get_queryset()`):
+- **Borrower**: Can see only their own profile, loans, EMIs, and payments.
+- **Loan Officer**: Can see only borrowers assigned directly to them, along with their loans, EMIs, and payments.
+- **Manager**: Can see only borrowers assigned directly to them or to Loan Officers reporting to them, along with their loans, EMIs, and payments.
+- **Admin / Super Admin**: Can view all database records.
 
-### Decimal Precision
-> [!IMPORTANT]
-> **Never use `FloatField` for any monetary value.** Floating-point arithmetic causes rounding
-> errors in financial calculations.
-> Always use `DecimalField(max_digits=12, decimal_places=2)`.
-
-### Write-Only Fields
-The following fields must always have `write_only=True` and must **never** appear in any response:
-- `password`
-- `confirm_password`
-- `aadhar` *(consider masking in read responses, e.g. `XXXX-XXXX-9012`)*
-
-### Rate Limiting
-> [!NOTE]
-> Apply Django REST Framework's throttling on:
-> - `POST /auth/login/` — prevent brute-force attacks
-> - `POST /auth/register/` — prevent spam registrations
-
----
-
-## Summary — Validation Layers
-
-```
-┌─────────────────────────────────────────────┐
-│ Layer 1 — Field-level (automatic)           │
-│  max_length, min_value, required, format     │
-├─────────────────────────────────────────────┤
-│ Layer 2 — validate_<field>() (per field)    │
-│  uniqueness, format, range, age check        │
-├─────────────────────────────────────────────┤
-│ Layer 3 — validate() (cross-field)          │
-│  password match, amount vs min, tenure range │
-├─────────────────────────────────────────────┤
-│ Layer 4 — create() / update() (business)   │
-│  role hardcoding, field snapshotting,        │
-│  state machine transitions                   │
-├─────────────────────────────────────────────┤
-│ Layer 5 — View permissions (row-level)      │
-│  IsAdmin, IsBorrower, IsKYCVerified,         │
-│  filtered querysets by request.user          │
-└─────────────────────────────────────────────┘
-```
+### Precision Enforcement
+- Always use `DecimalField(max_digits=12, decimal_places=2)` for financial calculations to prevent floating-point rounding errors.

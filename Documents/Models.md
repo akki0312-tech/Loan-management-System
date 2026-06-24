@@ -3,7 +3,7 @@
 ## Relationships Overview
 
 ```
-CustomUser
+CustomUser (manager self-relation)
     │
     ├──(OneToOne)──► BorrowerProfile
     │                       │
@@ -30,15 +30,23 @@ CustomUser
 | `last_name` | CharField | Inherited |
 | `phone_number` | CharField | Unique |
 | `date_of_birth` | DateField | For age eligibility checks |
-| `aadhar` | CharField | Unique, KYC identity |
-| `role` | CharField | `ADMIN` or `BORROWER` |
+| `aadhar_number` | TextField | Encrypted Aadhar ciphertext |
+| `aadhar_hash` | CharField | HMAC-SHA256 unique hash for duplicate checks |
+| `pan_number` | TextField | Encrypted PAN ciphertext |
+| `pan_hash` | CharField | HMAC-SHA256 unique hash for duplicate checks |
+| `role` | CharField | `SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`, `BORROWER` |
+| `manager` | ForeignKey | Self-referential relation (`'self'`) to reporting manager |
+| `profile_picture` | ImageField | Uploaded user profile picture |
 | `created_at` | DateTimeField | Auto set on creation |
 | `updated_at` | DateTimeField | Auto updated |
 
 **Constraints:**
-- `role` must be either `ADMIN` or `BORROWER`
+- `role` must be `SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`, or `BORROWER`
 - Only `BORROWER` role can apply for loans
-- Only `ADMIN` role can approve/reject loans
+- Staff roles (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`) can view, manage, or approve loans based on hierarchy
+- Borrowers report to a `LOAN_OFFICER` or `MANAGER` (via `manager` field)
+- Loan Officers report to a `MANAGER` (via `manager` field)
+- Managers report to an `ADMIN` or `SUPER_ADMIN` (via `manager` field)
 
 ---
 
@@ -71,13 +79,13 @@ CustomUser
 | `borrower_profile` | ForeignKey | → `BorrowerProfile` |
 | `score` | IntegerField | The score value at this point in time |
 | `recorded_at` | DateTimeField | Auto timestamped |
-| `updated_by` | ForeignKey | → `CustomUser` (Admin who made the change) |
-| `remarks` | TextField | Why was it changed? Admin's note |
+| `updated_by` | ForeignKey | → `CustomUser` (Admin/Officer who made the change) |
+| `remarks` | TextField | Why was it changed? Admin/Officer's note |
 
 **Constraints:**
 - Records are **never deleted or updated** — append-only
-- `updated_by` must have `role = ADMIN`
-- On insert → automatically sync `BorrowerProfile.credit_score` to latest value (via Django signals)
+- `updated_by` must have a staff role (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`)
+- On insert → automatically sync `BorrowerProfile.credit_score` to latest value (via Django signals/logic)
 
 ---
 
@@ -86,13 +94,15 @@ CustomUser
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | CharField | `PERSONAL`, `HOME`, `CAR`, `EDUCATION` |
-| `interest_type` | CharField | `FLAT` (Personal, Car) or `REDUCING_BALANCE` (Home, Education) |
+| `name` | CharField | `PERSONAL_LOAN`, `HOME_LOAN`, `CAR_LOAN`, `EDUCATION_LOAN` |
+| `interest_type` | CharField | `FLAT` or `REDUCING_BALANCE` |
 | `interest_rate` | DecimalField | Annual rate e.g. `10.50` (%) |
 | `min_amount` | DecimalField | Minimum loan amount allowed |
-| `max_amount` | DecimalField | Maximum loan amount allowed |
 | `min_tenure_months` | IntegerField | Minimum repayment period |
 | `max_tenure_months` | IntegerField | Maximum repayment period |
+
+> [!NOTE]
+> `max_amount` is not configured in `LoanType` – there is no upper cap on loan amount configured globally, only a minimum is enforced.
 
 **Constraints:**
 - Changing `interest_rate` here does NOT affect existing loans (rate is snapshotted into `Loan` at application time)
@@ -111,7 +121,7 @@ CustomUser
 | `interest_type` | CharField | **SNAPSHOT** — copied from `LoanType` at application time |
 | `tenure_months` | IntegerField | Chosen by borrower (within LoanType min/max) |
 | `status` | CharField | See lifecycle below |
-| `approved_by` | ForeignKey | → `CustomUser` (Admin), nullable |
+| `approved_by` | ForeignKey | → `CustomUser` (Admin/Officer), nullable |
 | `approved_at` | DateTimeField | Nullable |
 | `disbursed_at` | DateTimeField | Nullable |
 | `created_at` | DateTimeField | Auto set on creation |
@@ -127,9 +137,9 @@ CANCELLED  ← only from PENDING or UNDER_REVIEW
 
 **Constraints:**
 - `borrower.borrowerprofile.is_kyc_verified` must be `True` to apply
-- `amount_requested` must be within `LoanType.min_amount` and `LoanType.max_amount`
+- `amount_requested` must be ≥ `LoanType.min_amount`
 - `tenure_months` must be within `LoanType.min_tenure_months` and `LoanType.max_tenure_months`
-- `approved_by` must have `role = ADMIN`
+- `approved_by` must have a staff role (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `LOAN_OFFICER`)
 - `interest_rate` and `interest_type` are frozen at application time
 
 ---
@@ -183,7 +193,7 @@ CANCELLED  ← only from PENDING or UNDER_REVIEW
 
 | Model | Purpose | Key Relationship |
 |---|---|---|
-| `CustomUser` | Auth + identity for all users | Base model |
+| `CustomUser` | Auth + identity for all users | Base model with manager self-relation |
 | `BorrowerProfile` | Financial profile for borrowers | OneToOne → CustomUser |
 | `CreditScoreHistory` | Audit trail of score changes | FK → BorrowerProfile |
 | `LoanType` | Master config (rates, limits) | Referenced by Loan |
