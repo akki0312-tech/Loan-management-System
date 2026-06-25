@@ -263,9 +263,9 @@ class RoleAssignmentSerializer(serializers.ModelSerializer):
 
         # 1. Standard Admin/Super Admin checks (they can assign anyone to anything)
         if current_user.is_superuser or current_user.role in ['SUPER_ADMIN', 'ADMIN']:
-            if new_manager and new_manager.role not in ['SUPER_ADMIN', 'ADMIN', 'MANAGER']:
+            if new_manager and new_manager.role not in ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER']:
                 raise serializers.ValidationError(
-                    {"manager": "Only Super Admins, Admins, or Managers can be assigned as a manager."}
+                    {"manager": "Only Super Admins, Admins, Managers, or Loan Officers can be assigned as a manager."}
                 )
             return attrs
 

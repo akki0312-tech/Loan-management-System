@@ -18,6 +18,7 @@ from loans.serializers import (
 )
 # Reuse IsAdminUser from accounts — DRY, no duplication
 from accounts.views import IsAdminUser
+from accounts.permissions import HasRole
 
 def generate_emi_schedule(loan):
     principal = loan.amount_requested   

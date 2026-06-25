@@ -22,7 +22,7 @@ class CustomUser(AbstractUser):
     null=True,                       # not everyone has a manager (e.g. Admin, Borrower)
     blank=True,                      # optional in forms/API
     related_name='subordinates',     # manager.subordinates.all() gives you all their team members
-    limit_choices_to={'role__in': ['ADMIN', 'MANAGER']}  # only Admins or Managers can be set as manager
+    limit_choices_to={'role__in': ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'LOAN_OFFICER']}  # Admins, Managers, or Loan Officers can be assigned as a manager/handler
 )
 
     profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
