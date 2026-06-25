@@ -24,6 +24,11 @@ services:
     env_file:
       - .env
 
+    # Override USE_DOCKER here so Docker always uses PostgreSQL
+    # This means .env doesn't need USE_DOCKER — local dev stays on SQLite
+    environment:
+      - USE_DOCKER=True
+
     # This container depends on db being healthy before starting
     # Prevents Django from crashing because Postgres isn't ready yet
     depends_on:
