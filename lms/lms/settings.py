@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from decouple import config
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -22,12 +23,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-wbx274hhwm8ymi5cea*@d(x$32zx7mh@522q4rgne^z4$v!o4u'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool) #what's this? 
+# its setting up the default value for the debug mode in the .env file 
+# Everything in a .env file is a string. When Python reads DEBUG=True from the file, it gets the string "True" — not the boolean True.
+# In Python, bool("False") is actually True (any non-empty string is truthy!). python-decouple's cast=bool handles this correctly — it converts the string "True" / "False" to proper Python booleans.
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost').split(',') #what's this? 
+# its setting up the default value for the allowed hosts in the .env file 
+# and splitting it into a list of strings 
 
 
 # Application definition
@@ -79,12 +85,38 @@ WSGI_APPLICATION = 'lms.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# ─────────────────────────────────────────────────────────────
+# Database Configuration
+# USE_DOCKER=True  → PostgreSQL inside Docker (production-like)
+# USE_DOCKER=False → SQLite on your local machine (fast dev)
+#
+# How to switch:
+#   Local dev:  just run "python manage.py runserver" (USE_DOCKER defaults to False)
+#   Docker:     docker compose sets USE_DOCKER=True via .env
+# ─────────────────────────────────────────────────────────────
+
+USE_DOCKER = config('USE_DOCKER', default=False, cast=bool)
+
+if USE_DOCKER:
+    # PostgreSQL — used when running inside Docker
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'lms_db',
+            'USER': 'lms_user',
+            'PASSWORD': 'lms_password',
+            'HOST': config('DB_HOST', default='db'),
+            'PORT': config('DB_PORT', default='5432'),
+        }
     }
-}
+else:
+    # SQLite — used for local development (no Docker needed)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -161,5 +193,5 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 # Generate a valid Fernet key with:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # ─────────────────────────────────────────────────────────────
-FIELD_ENCRYPTION_KEY = 'TluxTaGOaGGGfvFdDMPvjVAJDxJkgT5VKo2PuQbzqe8='  # Replace in production
-FIELD_HASH_KEY       = 'lms-hmac-secret-key-replace-in-production'         # Replace in production
+FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY')
+FIELD_HASH_KEY       = config('FIELD_HASH_KEY')

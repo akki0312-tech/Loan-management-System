@@ -1,0 +1,59 @@
+# Version of the Docker Compose spec we're using
+version: "3.9"
+
+services:
+
+  # ── Service 1: Your Django App ──────────────────────────────
+  web:
+    # Build the image using the Dockerfile in current directory
+    build: .
+
+    # Run this command when the container starts
+    # It waits for DB, runs migrations, then starts Gunicorn
+    command: sh -c "python manage.py migrate && gunicorn lms.asgi:application --bind 0.0.0.0:8000 --workers 3 --worker-class uvicorn.workers.UvicornWorker"
+
+    # Map port 8000 on your laptop → port 8000 inside the container
+    # Format is "HOST:CONTAINER"
+    # Without this, you can't reach the container from your browser
+    ports:
+      - "8000:8000"
+
+    # Load environment variables from your .env file
+    # This is how secrets (DB password, secret key) get into the container
+    # without being hardcoded anywhere
+    env_file:
+      - .env
+
+    # This container depends on db being healthy before starting
+    # Prevents Django from crashing because Postgres isn't ready yet
+    depends_on:
+      db:
+        condition: service_healthy
+
+    # Mount your local code into the container
+    # This means code changes reflect instantly without rebuilding
+    # Format: "LOCAL_PATH:CONTAINER_PATH"
+    volumes:
+      - .:/app
+
+  # ── Service 2: PostgreSQL Database ──────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lms_db
+      POSTGRES_USER: lms_user
+      POSTGRES_PASSWORD: lms_password
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lms_user -d lms_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+# ── Volumes declaration ─────────────────────────────────────
+# Named volumes must be declared here at the top level
+volumes:
+  postgres_data:
