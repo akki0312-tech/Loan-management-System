@@ -1,0 +1,514 @@
+[
+{
+  "model": "auth.group",
+  "pk": 1,
+  "fields": {
+    "name": "Admins",
+    "permissions": [
+      22,
+      24,
+      38,
+      40,
+      33,
+      34,
+      35,
+      36
+    ]
+  }
+},
+{
+  "model": "auth.group",
+  "pk": 2,
+  "fields": {
+    "name": "Managers",
+    "permissions": [
+      26,
+      28,
+      29,
+      32,
+      44,
+      38,
+      40,
+      48
+    ]
+  }
+},
+{
+  "model": "auth.group",
+  "pk": 3,
+  "fields": {
+    "name": "Loan_Officers",
+    "permissions": [
+      26,
+      28,
+      29,
+      32,
+      44,
+      38,
+      40,
+      48
+    ]
+  }
+},
+{
+  "model": "auth.group",
+  "pk": 4,
+  "fields": {
+    "name": "Borrowers",
+    "permissions": [
+      28,
+      44,
+      37,
+      40,
+      45,
+      48
+    ]
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "w0k0g9dtxa3j8o67dg1zdb0k1l9l3mos",
+  "fields": {
+    "session_data": ".eJxVjM0KwjAQBt8lZwlN3W6KR-8-Q9lkv5iqJNCfk_juEuhBrzPDvM0k-5anfcUyzWouxpnTLwsSnyhN6EPKvdpYy7bMwbbEHna1t6p4XY_2b5BlzW3LAu7G2GmKrAEUvKfkAQdwENKRtR8Yqj3DSUw6eEpEngc9k4P5fAEVzzj9:1wcJwn:Jo0i7mx55kaDJO3kHt5_tjgVhmVFowGulswZgJvryoQ",
+    "expire_date": "2026-07-08T09:31:05.499Z"
+  }
+},
+{
+  "model": "accounts.customuser",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$JkB8XMgY27usUHe116z4f7$Ky+1h6tY0v3qDAA0a2rmaS+08lbB3/6tgwUKuetyNOo=",
+    "last_login": "2026-06-24T09:31:05.492Z",
+    "is_superuser": true,
+    "username": "dell",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-06-22T06:10:52.596Z",
+    "email": "akkshay0312@gmail.com",
+    "first_name": null,
+    "last_name": null,
+    "phone_number": null,
+    "date_of_birth": null,
+    "aadhar_number": null,
+    "aadhar_hash": null,
+    "pan_number": null,
+    "pan_hash": null,
+    "role": "MANAGER",
+    "manager": null,
+    "profile_picture": "",
+    "created_at": "2026-06-22T06:10:53.247Z",
+    "updated_at": "2026-06-24T12:04:46.649Z",
+    "groups": [
+      2
+    ],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$DgriUs0MwJRaCfeeT7IBs3$aqLV8kaYoywf82US5ORpZAY65U3ZXdN9GgGZ7vevx9s=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "alice_manager",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-24T11:54:09.106Z",
+    "email": "alice@lms.com",
+    "first_name": "Alice",
+    "last_name": "Manager",
+    "phone_number": "9000000001",
+    "date_of_birth": "1990-01-01",
+    "aadhar_number": "gAAAAABqO8VhivMhXQJGqiHzRNm__8v8pe6wxnGZnSgzvxuM0qZfAEWMvtKu6mT7PtqSb-WoKUUlFYQJEOi7-3MOGLFMheHBcA==",
+    "aadhar_hash": "6bc29efeb67dc1543c2586349563d81d9f4b283836d9a93d1fa7cd402bc4e544",
+    "pan_number": "gAAAAABqO8Vhw5nhlHtaHdJY7FJ87jXrfgP1UaLiQK9kb4tChexmTzYS2oo3dKcqDw5MT-itahCAqldYb_6LCUtvkkxgCEtZYQ==",
+    "pan_hash": "4e803193610d59534cb0225fb8a1296fa93f24fa3a87fc7e12dadcf034394d4b",
+    "role": "MANAGER",
+    "manager": null,
+    "profile_picture": "",
+    "created_at": "2026-06-24T11:54:13.057Z",
+    "updated_at": "2026-06-24T12:22:47.858Z",
+    "groups": [
+      2
+    ],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "pk": 3,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$2qoFoa3I7Me3eJeVOpfDYC$LfO3CQUNtzayHLRI72D0HgC4Jvm4oEIkBfz8kuQqlLY=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "bob_officer",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-24T11:55:06.912Z",
+    "email": "bob@lms.com",
+    "first_name": "Bob",
+    "last_name": "Officer",
+    "phone_number": "9000000002",
+    "date_of_birth": "1992-02-02",
+    "aadhar_number": "gAAAAABqO8WaJkA_swWwATiXAxltiiX8sC5DtdDDeaTOiHOLtwEBsPH2iAIKYnuaLx8N-vmeqCtNDMlLPC-y9POZuWw3uTh0vQ==",
+    "aadhar_hash": "93b5a9f0bf9054383adc73e10b9642d2aea1e4f1fc09955a2437d86ff89ce1f8",
+    "pan_number": "gAAAAABqO8Wa13ih9NXwpbPnWI2fi3pvto1guyjGptslBZGARnxv4fKbo2zBM9I-yfp_Y73sqDHZdWdI5cF7-u-8RjHm4U246w==",
+    "pan_hash": "b9c4e2458075b4c023b45d87d7060780b92821558212b674600f552d029b16cd",
+    "role": "LOAN_OFFICER",
+    "manager": 2,
+    "profile_picture": "",
+    "created_at": "2026-06-24T11:55:11.045Z",
+    "updated_at": "2026-06-24T12:26:27.103Z",
+    "groups": [
+      3
+    ],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "pk": 4,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$wN7FXAnAunTFrTIRjFxQ8J$U93/wToSRxNYl9HyiDibMOnp+1pYinbEOJuqEUw9CCA=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "charlie_borrower",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-24T11:55:32.704Z",
+    "email": "charlie@lms.com",
+    "first_name": "Charlie",
+    "last_name": "Borrower",
+    "phone_number": "9000000003",
+    "date_of_birth": "1995-03-03",
+    "aadhar_number": "gAAAAABqO8W0lUPRZKANH4lcMjAOD-nNoFxJixxT1FKY9aVrvbbgq6b5Tqf2M0HIvBGX-y6rPNsy6X1YcyD49efVqlUFyzm5nw==",
+    "aadhar_hash": "6be3bc96879a34ddb48148ef22e738e061a1bc726178c976d596b9209ece0232",
+    "pan_number": "gAAAAABqO8W0XLdK6l8f191-84r5L666wJUaVpoobks_2kJOMrj2Hi7fiHBo-chXvwh_q35xdwdrVQC0jVVmPaCO3Hhh9azCJw==",
+    "pan_hash": "b2d956096fac7894b00115adedfb1a5ebaf6af5142392bf886d7c715500bbff5",
+    "role": "BORROWER",
+    "manager": 3,
+    "profile_picture": "",
+    "created_at": "2026-06-24T11:55:37.255Z",
+    "updated_at": "2026-06-25T03:59:16.767Z",
+    "groups": [
+      4
+    ],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.customuser",
+  "pk": 5,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$RYR2mv2KQsRiZE2dyZRC97$4zR3UI01XPQ0qxtmAM+UXRysNwjKAq/gDmFgAsf7elw=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "daniel_borrower",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-25T04:22:59.583Z",
+    "email": "daniel@lms.com",
+    "first_name": "Daniel",
+    "last_name": "Borrower",
+    "phone_number": "9000000004",
+    "date_of_birth": "1995-06-25",
+    "aadhar_number": "gAAAAABqPK0j9uNsoXTGg1UJbIZSIvHW7L6S6YkRB4RLR7oDCFEIbi-Ns0NkDUUTGN_61HY8TE2tEUX61iJ3iuf9-YoRNXwdwg==",
+    "aadhar_hash": "276a852a99682702a6db6077df1aaae7ee2fc7dc0d3001e79cb341f9366c1a8e",
+    "pan_number": "gAAAAABqPK0j4wWGxKMVd7kCblxHxdgQEuYa7NkRz2LUwCc7VbgI3ZelAbp6Q4bN107dxkHyNOKSqUfe1dxQMeembty6FQDH3Q==",
+    "pan_hash": "3764c1b3a634d4570fce15b34e1754331754b40f34c197d10ad0cd207942b483",
+    "role": "BORROWER",
+    "manager": null,
+    "profile_picture": "",
+    "created_at": "2026-06-25T04:23:00.297Z",
+    "updated_at": "2026-06-25T04:23:00.297Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "accounts.borrowerprofile",
+  "pk": 1,
+  "fields": {
+    "user": 4,
+    "salary": "50000.00",
+    "employment_type": "SALARIED",
+    "employer_name": null,
+    "credit_score": 750,
+    "monthly_expenses": "15000.00",
+    "is_kyc_verified": true,
+    "created_at": "2026-06-25T04:11:30.336Z",
+    "updated_at": "2026-06-25T04:18:43.001Z"
+  }
+},
+{
+  "model": "accounts.borrowerprofile",
+  "pk": 2,
+  "fields": {
+    "user": 5,
+    "salary": "50000.00",
+    "employment_type": "SALARIED",
+    "employer_name": null,
+    "credit_score": null,
+    "monthly_expenses": "15000.00",
+    "is_kyc_verified": false,
+    "created_at": "2026-06-25T04:27:14.024Z",
+    "updated_at": "2026-06-25T04:27:14.037Z"
+  }
+},
+{
+  "model": "accounts.creditscorehistory",
+  "pk": 1,
+  "fields": {
+    "borrower_profile": 1,
+    "score": 750,
+    "recorded_at": "2026-06-25T04:18:42.989Z",
+    "updated_by": 3,
+    "remarks": "Credit bureau score verified."
+  }
+},
+{
+  "model": "loans.loantype",
+  "pk": 2,
+  "fields": {
+    "name": "PERSONAL_LOAN",
+    "interest_type": "FLAT",
+    "interest_rate": "12.00",
+    "min_amount": "10000.00",
+    "min_tenure_months": 6,
+    "max_tenure_months": 60
+  }
+},
+{
+  "model": "loans.loantype",
+  "pk": 3,
+  "fields": {
+    "name": "CAR_LOAN",
+    "interest_type": "FLAT",
+    "interest_rate": "9.50",
+    "min_amount": "100000.00",
+    "min_tenure_months": 12,
+    "max_tenure_months": 84
+  }
+},
+{
+  "model": "loans.loantype",
+  "pk": 4,
+  "fields": {
+    "name": "HOME_LOAN",
+    "interest_type": "REDUCING_BALANCE",
+    "interest_rate": "8.50",
+    "min_amount": "500000.00",
+    "min_tenure_months": 60,
+    "max_tenure_months": 300
+  }
+},
+{
+  "model": "loans.loantype",
+  "pk": 5,
+  "fields": {
+    "name": "EDUCATION_LOAN",
+    "interest_type": "REDUCING_BALANCE",
+    "interest_rate": "10.00",
+    "min_amount": "50000.00",
+    "min_tenure_months": 12,
+    "max_tenure_months": 120
+  }
+},
+{
+  "model": "loans.loan",
+  "pk": 1,
+  "fields": {
+    "borrower": 4,
+    "loan_type": 2,
+    "amount_requested": "20000.00",
+    "interest_rate": "12.00",
+    "interest_type": "FLAT",
+    "tenure_months": 12,
+    "status": "ACTIVE",
+    "approved_by": 3,
+    "approved_at": "2026-06-25T05:13:00.367Z",
+    "disbursed_at": "2026-06-25T05:13:10.842Z",
+    "created_at": "2026-06-25T04:59:52.700Z",
+    "updated_at": "2026-06-25T05:22:42.036Z"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 1,
+  "fields": {
+    "loan": 1,
+    "emi_number": 1,
+    "due_date": "2026-07-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "18333.33",
+    "status": "PAID"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 2,
+  "fields": {
+    "loan": 1,
+    "emi_number": 2,
+    "due_date": "2026-08-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "16666.66",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 3,
+  "fields": {
+    "loan": 1,
+    "emi_number": 3,
+    "due_date": "2026-09-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "14999.99",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 4,
+  "fields": {
+    "loan": 1,
+    "emi_number": 4,
+    "due_date": "2026-10-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "13333.32",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 5,
+  "fields": {
+    "loan": 1,
+    "emi_number": 5,
+    "due_date": "2026-11-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "11666.65",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 6,
+  "fields": {
+    "loan": 1,
+    "emi_number": 6,
+    "due_date": "2026-12-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "9999.98",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 7,
+  "fields": {
+    "loan": 1,
+    "emi_number": 7,
+    "due_date": "2027-01-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "8333.31",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 8,
+  "fields": {
+    "loan": 1,
+    "emi_number": 8,
+    "due_date": "2027-02-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "6666.64",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 9,
+  "fields": {
+    "loan": 1,
+    "emi_number": 9,
+    "due_date": "2027-03-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "4999.97",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 10,
+  "fields": {
+    "loan": 1,
+    "emi_number": 10,
+    "due_date": "2027-04-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "3333.30",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 11,
+  "fields": {
+    "loan": 1,
+    "emi_number": 11,
+    "due_date": "2027-05-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "1666.63",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.emischedule",
+  "pk": 12,
+  "fields": {
+    "loan": 1,
+    "emi_number": 12,
+    "due_date": "2027-06-25",
+    "emi_amount": "1866.67",
+    "principal_component": "1666.67",
+    "interest_component": "200.00",
+    "outstanding_balance": "0.00",
+    "status": "PENDING"
+  }
+},
+{
+  "model": "loans.payment",
+  "pk": 1,
+  "fields": {
+    "loan": 1,
+    "emi_schedule": 1,
+    "amount_paid": "1866.67",
+    "paid_at": "2026-06-25T05:29:46.689Z"
+  }
+}
+]

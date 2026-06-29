@@ -4,6 +4,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from datetime import date
 from django.contrib.auth.models import Group
 from accounts.encryption import encrypt, decrypt, make_hash, mask_aadhar, mask_pan
+from accounts.utils import send_login_notification
 
 class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True)
@@ -92,6 +93,28 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['role'] = user.role
         return token
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        
+        # Extract IP address from request context
+        request = self.context.get('request')
+        ip_address = None
+        if request:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0]
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+                
+        # Trigger asynchronous email notification
+        send_login_notification(
+            user_email=self.user.email,
+            username=self.user.username,
+            ip_address=ip_address
+        )
+        
+        return data
 
 class BorrowerProfileSerializer(serializers.ModelSerializer):
     class Meta:

@@ -144,6 +144,28 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+
+    # ── Throttling ────────────────────────────────────────────
+    # AnonRateThrottle  → applies to unauthenticated requests (login, register, emi-calculator)
+    # UserRateThrottle  → applies to authenticated requests (loans, payments etc.)
+    #
+    # These use the Redis cache defined above — all Gunicorn workers
+    # share the SAME counter, so rate limits are globally consistent
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '20/minute',   # unauthenticated: 20 req/min (login, register)
+        'user': '200/minute',  # authenticated: 200 req/min (normal API usage)
+    },
+
+    # ── Pagination ────────────────────────────────────────────
+    # Every list endpoint now returns 20 results per page max
+    # DRF enforces LIMIT 20 at the SQL level — database never
+    # returns more than PAGE_SIZE rows regardless of total count
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
 }
 
 SIMPLE_JWT = {
@@ -195,3 +217,38 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 # ─────────────────────────────────────────────────────────────
 FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY')
 FIELD_HASH_KEY       = config('FIELD_HASH_KEY')
+
+
+# ─────────────────────────────────────────────────────────────
+# Cache — Redis
+# Used for: throttle counters, response caching (later)
+#
+# In Docker:  redis://redis:6379/1   ("redis" = service name in docker-compose)
+# Locally:    not used (USE_DOCKER=False skips Redis-dependent features)
+#
+# /1 means database index 1 inside Redis
+# Redis supports 16 databases (0-15) — we use 1 to keep it separate from others
+# ─────────────────────────────────────────────────────────────
+if USE_DOCKER:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": config("REDIS_URL", default="redis://redis:6379/1"),
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            }
+        }
+    }
+
+# ─────────────────────────────────────────────────────────────
+# Email Configuration
+# ─────────────────────────────────────────────────────────────
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+
+OPEN_EXCHANGE_APP_ID = config('OPEN_EXCHANGE_APP_ID', default='')

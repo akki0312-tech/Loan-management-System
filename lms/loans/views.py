@@ -6,6 +6,8 @@ from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Q
+import requests
+from django.core.cache import cache
 
 
 from loans.models import LoanType, Loan, EMISchedule, Payment
@@ -257,3 +259,63 @@ class PaymentListView(generics.ListAPIView):
         return Payment.objects.none()
 
 
+class PublicMarketDataView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.conf import settings
+        
+        # 1. Check if the data is already cached
+        cached_data = cache.get('exchange_rates_data')
+        
+        if not cached_data:
+            # 2. Fetch from Open Exchange Rates API if not cached
+            try:
+                api_key = settings.OPEN_EXCHANGE_APP_ID
+                response = requests.get(f'https://openexchangerates.org/api/latest.json?app_id={api_key}', timeout=5)
+                response.raise_for_status()
+                cached_data = response.json()
+                # Cache the response for 1 hour (3600 seconds)
+                cache.set('exchange_rates_data', cached_data, timeout=3600)
+            except requests.RequestException as e:
+                return Response({"error": "Failed to fetch public market data.", "details": str(e)}, status=503)
+
+        user_role = request.user.role
+        rates = cached_data.get("rates", {})
+
+        # 3. Role-Based Response Filtering
+        if user_role == 'BORROWER':
+            # Borrowers only see a few major currency rates
+            return Response({
+                "major_rates": {
+                    "USD": rates.get("USD", 1),
+                    "EUR": rates.get("EUR"),
+                    "GBP": rates.get("GBP"),
+                    "INR": rates.get("INR")
+                },
+                "note": "This is a simplified view for borrowers."
+            })
+            
+        elif user_role in ['LOAN_OFFICER', 'MANAGER']:
+            # Staff sees major rates + metadata
+            return Response({
+                "major_rates": {
+                    "USD": rates.get("USD", 1),
+                    "EUR": rates.get("EUR"),
+                    "GBP": rates.get("GBP"),
+                    "INR": rates.get("INR")
+                },
+                "last_updated_timestamp": cached_data.get("timestamp"),
+                "base_currency": cached_data.get("base"),
+                "note": "Detailed view for loan officers and managers."
+            })
+            
+        elif user_role in ['ADMIN', 'SUPER_ADMIN']:
+            # Admins see the raw data and metadata
+            return Response({
+                "raw_api_data": cached_data,
+                "data_source": "Open Exchange Rates API",
+                "cached": True
+            })
+
+        return Response({"error": "Role not recognized"}, status=403)

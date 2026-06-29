@@ -8,6 +8,7 @@ from loans.views import (
     EMIScheduleListView,
     PaymentCreateView,
     PaymentListView,
+    PublicMarketDataView
 )
 
 urlpatterns = [
@@ -28,4 +29,5 @@ urlpatterns = [
     # Payments
     path('loans/payments/', PaymentCreateView.as_view(), name='payment_create'),
     path('loans/payments/history/', PaymentListView.as_view(), name='payment_list'),
+    path('loans/market-data/', PublicMarketDataView.as_view(), name='market_data'),
 ]

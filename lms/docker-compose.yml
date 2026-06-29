@@ -34,6 +34,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
     # Mount your local code into the container
     # This means code changes reflect instantly without rebuilding
@@ -58,7 +60,28 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    # ── Service 3: Redis Cache ───────────────────────────────────
+  redis:
+    # Official Redis image, alpine = minimal size
+    image: redis:7-alpine
+
+    # Expose Redis port to your laptop so you can inspect it if needed
+    ports:
+      - "6379:6379"
+
+    # Keep Redis data if container restarts
+    volumes:
+      - redis_data:/data
+
+    # Health check — Django won't start until Redis is ready
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 # ── Volumes declaration ─────────────────────────────────────
 # Named volumes must be declared here at the top level
 volumes:
   postgres_data:
+  redis_data:
