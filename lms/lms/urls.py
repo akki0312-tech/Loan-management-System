@@ -18,11 +18,21 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),  # Includes accounts urls
     path('api/', include('loans.urls')),     # Includes loans urls
+    # 1. This endpoint generates the JSON/YAML schema
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    
+    # 2. This is the Swagger UI endpoint that reads the schema
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    
+    # 3. (Optional) ReDoc UI endpoint if you prefer that style
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
 # Serve uploaded media files during development

@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import (
     RegisterView,
     LoginView,
+    VerifyOTPView,
     MyProfileView,
     BorrowerProfileView,
     kycView,
@@ -14,6 +15,7 @@ from accounts.views import (
 urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', LoginView.as_view(), name='login'),
+    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify_otp'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', MyProfileView.as_view(), name='my_profile'),
     path('auth/borrower-profile/', BorrowerProfileView.as_view(), name='borrower_profile'),

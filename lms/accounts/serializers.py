@@ -5,6 +5,10 @@ from datetime import date
 from django.contrib.auth.models import Group
 from accounts.encryption import encrypt, decrypt, make_hash, mask_aadhar, mask_pan
 from accounts.utils import send_login_notification
+import random
+from django.core.cache import cache
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 
 class RegisterSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True)
@@ -84,20 +88,67 @@ class RegisterSerializer(serializers.ModelSerializer):
 # This allows us to implement role-based access control and personalize responses based on the user's information.
 
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-        # Add custom claims
-        token['username'] = user.username
-        token['email'] = user.email
-        token['role'] = user.role
-        return token
+class LoginWithOTPSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
-    def validate(self, attrs):
-        data = super().validate(attrs)
+    def validate(self, data):
+        username = data.get('username')
+        password = data.get('password')
+
+        user = authenticate(username=username, password=password)
+        if not user:
+            raise serializers.ValidationError("Invalid username or password.")
+        if not user.is_active:
+            raise serializers.ValidationError("User account is disabled.")
+
+        # Generate 6-digit OTP
+        otp = str(random.randint(100000, 999999))
         
-        # Extract IP address from request context
+        # Save OTP in cache for 5 minutes
+        cache.set(f"otp_{username}", otp, timeout=300)
+        
+        # Print OTP to terminal (as requested by user)
+        print(f"\n==========================================")
+        print(f"OTP for {username}: {otp}")
+        print(f"==========================================\n")
+
+        return {
+            "username": username,
+            "message": "OTP generated and printed to console."
+        }
+
+
+class VerifyOTPSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    otp = serializers.CharField()
+
+    def validate(self, data):
+        username = data.get('username')
+        otp = data.get('otp')
+
+        cached_otp = cache.get(f"otp_{username}")
+        if not cached_otp or cached_otp != otp:
+            raise serializers.ValidationError("Invalid or expired OTP.")
+
+        # OTP is valid, clear it from cache
+        cache.delete(f"otp_{username}")
+
+        # Fetch user
+        try:
+            user = CustomUser.objects.get(username=username)
+        except CustomUser.DoesNotExist:
+            raise serializers.ValidationError("User not found.")
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        refresh['username'] = user.username
+        refresh['email'] = user.email
+        refresh['role'] = user.role
+
+        access = str(refresh.access_token)
+
+        # Extract IP address for email notification
         request = self.context.get('request')
         ip_address = None
         if request:
@@ -106,15 +157,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 ip_address = x_forwarded_for.split(',')[0]
             else:
                 ip_address = request.META.get('REMOTE_ADDR')
-                
-        # Trigger asynchronous email notification
+
+        # Trigger asynchronous email notification since login is now fully complete
         send_login_notification(
-            user_email=self.user.email,
-            username=self.user.username,
+            user_email=user.email,
+            username=user.username,
             ip_address=ip_address
         )
-        
-        return data
+
+        return {
+            "access": access,
+            "refresh": str(refresh),
+            "role": user.role
+        }
 
 class BorrowerProfileSerializer(serializers.ModelSerializer):
     class Meta:

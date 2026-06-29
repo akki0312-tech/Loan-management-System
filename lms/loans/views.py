@@ -239,6 +239,19 @@ class PaymentCreateView(generics.CreateAPIView):
 
     def get_serializer_context(self):
         return {'request': self.request}
+    
+    def perform_create(self, serializer):
+        # 1. Save the payment to the database
+        payment = serializer.save()
+        
+        # 2. Import your celery task (make sure the path matches where you put it)
+        from notifications.tasks import process_payment_notification
+        
+        # 3. Trigger the notification asynchronously
+        process_payment_notification.delay(
+            payment_id=payment.id,
+            user_id=self.request.user.id
+        )
 
 
 class PaymentListView(generics.ListAPIView):

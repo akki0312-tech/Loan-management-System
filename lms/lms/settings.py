@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'notifications',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -144,6 +146,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 
     # ── Throttling ────────────────────────────────────────────
     # AnonRateThrottle  → applies to unauthenticated requests (login, register, emi-calculator)
@@ -252,3 +255,22 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
 
 OPEN_EXCHANGE_APP_ID = config('OPEN_EXCHANGE_APP_ID', default='')
+
+import os 
+# ── Celery Configuration ─────────────────────────────────────
+# Read the Redis URL from the .env file. Fall back to localhost if running outside Docker.
+CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
+
+# Also use Redis to store the results of the background tasks
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+# Expect tasks to be serialized in JSON
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Loan Management System API',
+    'DESCRIPTION': 'API documentation for the Loan Management System backend.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False, # Set to True if you want the schema itself to be visible in the Swagger UI
+}

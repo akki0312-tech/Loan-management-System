@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from accounts.models import BorrowerProfile, CustomUser, CreditScoreHistory
 from accounts.serializers import (
     BorrowerProfileSerializer, CreditScoreHistorySerializer,RoleAssignmentSerializer,
-    RegisterSerializer, CustomTokenObtainPairSerializer,
+    RegisterSerializer, LoginWithOTPSerializer, VerifyOTPSerializer,
     UserSerializer, AdminKYCSerializer, ProfilePictureSerializer,
 )
 from accounts.permissions import HasRole, InGroup, IsBorrower, IsKYCVerified
@@ -25,9 +25,23 @@ class RegisterView(generics.CreateAPIView): #what is generics.CreateAPIView? It 
     
     permission_classes = [AllowAny] #why is permission_classes empty? Because we want to allow anyone to register, so we don't require any authentication or permissions for this view.
 
-class LoginView(TokenObtainPairView): #what is TokenObtainPairView? It is a built-in view provided by Django REST Framework Simple JWT that handles user authentication and token generation. It provides a default implementation for handling POST requests to obtain access and refresh tokens for authenticated users.
-    serializer_class = CustomTokenObtainPairSerializer #what is serializer_class? It specifies which serializer should be used to validate and serialize the incoming data for this view. In this case, it uses the CustomTokenObtainPairSerializer to handle user login and token generation.
+class LoginView(generics.GenericAPIView):
+    serializer_class = LoginWithOTPSerializer
     permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
+
+class VerifyOTPView(generics.GenericAPIView):
+    serializer_class = VerifyOTPSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
 
 class MyProfileView(generics.RetrieveUpdateAPIView):
     #what is generics.RetrieveUpdateAPIView? It is a built-in view provided by Django REST Framework that handles retrieving and updating a single model instance. It provides a default implementation for handling GET and PUT requests to retrieve and update an object from the database.
